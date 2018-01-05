@@ -1,0 +1,34 @@
+using timers msp430
+
+timerA0
+has 3 CCRs
+
+
+set led high
+run timer
+when it hits ccr1 of timera0, configure output into reset mode to turn off led 1.6
+
+timer gpio outs
+ccr0 drive p1.5
+ccr1 drives p1.6
+
+
+
+
+step by step from https://training.ti.com/msp430-workshop-series-6-12-timers
+1 config timer/counter (TACTL)
+	clocking 
+	which count mode
+	interupt on TAR overflow
+	
+2 setup ccrs
+	capture (TACCTL)
+		input
+		interrupt on capture
+	compare (TACCTL, TACCR)
+		compare-to value
+		output mode
+		int on capture?
+		
+3 clear interrupt flags, start timer
+4. write ISRs if needed

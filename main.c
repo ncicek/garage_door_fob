@@ -16,14 +16,8 @@
 #define TX_MODE
 //#define RX_MODE
 
-uint8_t bounce_locked = 0;
-uint8_t button_pressed = 0;
-uint8_t debug_count = 0;
-uint8_t status;
-uint8_t read_val[1];
 
-#define TX_PLOAD_WIDTH  16  // 32 unsigned chars TX payload
-//uint8_t rx_buf[TX_PLOAD_WIDTH] = {0};
+#define TX_PLOAD_WIDTH  16  // 16 unsigned chars TX payload
 uint8_t tx_buf[TX_PLOAD_WIDTH] = {0};
 
 //prototypes
@@ -36,6 +30,10 @@ void listen();
 void transmit();
 void blink_led();
 
+//global vars
+uint8_t bounce_locked = 0;
+uint8_t button_pressed = 0;
+uint8_t debug_count = 0;
 
 int main(void)
 {
@@ -199,7 +197,6 @@ void transmit(){
     generate_code(101, code);
 
     NRF_cmd(FLUSH_TX);
-    status = NRF_read_status();
     NRF_clear_status(); //clears all flags such as irq bit
     NRF_write_buf(W_TX_PAYLOAD, code, 16);  //write the code as payload into the nrf24
     NRF_power_mode(1); //power up
@@ -210,9 +207,8 @@ void transmit(){
     NRF_set_ce(0);  //stop transmitting
     NRF_power_mode(0); //power down radio
 
-
     uint8_t lost_packets = NRF_read(OBSERVE_TX)&0xf;
-    status = NRF_read_status();
+    uint8_t status = NRF_read_status();
 
     if (status&TX_DS){
         blink_led();

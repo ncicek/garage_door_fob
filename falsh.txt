@@ -1,0 +1,4 @@
+flash notes
+
+flash segments A-D are 64 bytes each
+segment a contains calib data so maybe dont use that
