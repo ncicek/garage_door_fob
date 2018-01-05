@@ -1,21 +1,18 @@
-//1.4 mosi
-//1.5 miso
-//1.6 sclk
+//1.2 mosi
+//1.1 miso
+//1.4 sclk
 
 //1.0 led
-//1.2 csn (spi chip select)
+//1.6 csn (spi chip select)
 //1.7 ce (Chip Enable Activates RX or TX mode)
 //2.0 irq coming out of nrf (active low)
-
-//2.7 button
-
 //2.1 toggle_door fet (only for receiver) active high
+//1.3 button
 
 #include <msp430.h>
 #include <stdint.h>
 #include "nRF24L01.h"
 #include "NRF.h"
-
 #include "radio_functions.h"
 
 #define TOGGLE_DOOR 1
@@ -35,51 +32,52 @@ uint8_t button_pressed = 0;
 int main(void)
 {
     WDTCTL = WDTPW + WDTHOLD;				  // Stop watchdog timer
-    PM5CTL0 &= ~LOCKLPM5;
 
 	//BCSCTL1 |= DIVA_0;                        // ACLK/2
     //BCSCTL3 |= LFXT1S_2;                      // ACLK = VLO
 
 	//gpio for led csn and ce pins
 	P1OUT = 0x00;							  // P1 setup for LED & reset output
-	P1DIR |= BIT0 + BIT2 + BIT7;
+	P1DIR |= BIT0 + BIT6 + BIT7;
 
 	//setup pin 2.0 as irq nrf
-	P2OUT &= ~BIT0;
+	P2OUT = 0x00;
 	P2DIR &= ~BIT0;
+	P2IE |=  BIT0;                            // interrupt enable
     P2IES |= BIT0;                            // Hi/lo edge
     P2IFG &= ~BIT0;                           // IFG cleared
-	P2IE |=  BIT0; 
 
-    //setup pin 2.7 as button irq
-    P2DIR &= ~BIT7;	//set as input
-    P2IES |= BIT7;                            // P1.3 Hi/lo edge
-    P2OUT |= BIT7;
-    P2REN |= BIT7;                          // Enable Pull Up on
-    P2IFG &= ~BIT7;                           // P1.3 IFG cleared
-	P2IE |=  BIT7; 
-
+    //setup pin 1.3 as button irq
+    P1DIR &= ~BIT3;
+    P1IES |= BIT3;                            // P1.3 Hi/lo edge
+    P1OUT |= BIT3;
+    P1REN |= BIT3;                          // Enable Pull Up on
+    P1IFG &= ~BIT3;                           // P1.3 IFG cleared
+	P1IE |=  BIT3; 
+	
     #if defined(RX_MODE)
     #endif
 
 
 	//usci config
-    P1DIR |= BIT4 + BIT5 + BIT6;
-    P1SEL0 = BIT4 + BIT5+ BIT6;   //set the spi pins to spi mode
+    P1SEL = BIT1 + BIT2 + BIT4;	  //set the spi pins to spi mode
+	P1SEL2 = BIT1 + BIT2 + BIT4;  //set the spi pins to spi mode
 
 
+	//usci config
+	UCA0CTL1 |= UCSWRST; //set reset before configuring
+	UCA0CTL0 |= UCMSB + UCMST + UCSYNC + UCCKPH;	 // 3-pin, 8-bit SPI master
+	UCA0CTL1 |= UCSSEL_2;					  // smclk
+	UCA0BR0 |= 0x00;						  // /2
+	UCA0BR1 = 0;							  //
+	UCA0MCTL = 0;							  // No modulation
+	UCA0CTL1 &= ~UCSWRST;					// **Initialize USCI state machine**
+	IE2 |= UCA0RXIE;						  // Enable USCI0 RX interrupt
 
-	UCA0CTLW0 |= UCSWRST;                     // **Put state machine in reset**
-    UCA0CTLW0 |= UCMST|UCSYNC|UCCKPH|UCMSB;   // 3-pin, 8-bit SPI master
-                                              // Clock polarity high, MSB
-    UCA0CTLW0 |= UCSSEL__SMCLK;               // SMCLK
-    UCA0BR0 = 0x01;                           // /2,fBitClock = fBRCLK/(UCBRx+1).
-    UCA0BR1 = 0;                              //
-    UCA0MCTLW = 0;                            // No modulation
-    UCA0CTLW0 &= ~UCSWRST;                    // **Initialize USCI state machine**
-    UCA0IE |= UCRXIE;                         // Enable USCI_A0 RX interrupt
-
-
+	//flash controller
+	//DCOCTL = CALDCO_1MHZ;
+	//FCTL2 = FWKEY + FSSEL0 + FN1;             // MCLK/3 for Flash Timing Generator
+	
 	NRF_set_csn(1);
 	NRF_set_ce(0);
 	while (NRF_check_chip() != 1);	//dont do anything before verifying comms
@@ -111,9 +109,9 @@ int main(void)
 
 void NRF_set_csn(uint8_t bit){
     if (bit == 1)
-        P1OUT |= BIT2;
+        P1OUT |= BIT6;
     else
-        P1OUT &= ~BIT2;
+        P1OUT &= ~BIT6;
 }
 
 void NRF_set_ce(uint8_t bit){
@@ -143,23 +141,25 @@ uint8_t get_rx_buffer(){
     return (return_byte);
 }
 
-// Button and NRF IRQs
+// NRF IRQs
 #pragma vector=PORT2_VECTOR
 __interrupt void Port_2(void)
 {
-	if (P2IFG & BIT0){	//nrf irq
-		P2IFG &= ~BIT0; 
-		__bic_SR_register_on_exit(LPM4_bits);
-	}
-	if (P2IFG & BIT7){	//butotn irq
-		P2IFG &= ~BIT7;                       
-		if (bounce_locked == 0)
-			button_pressed = 1;
-		__bic_SR_register_on_exit(LPM4_bits);
-	}
+  P2IFG &= ~BIT0;                           // P2.0 IFG cleared
+  __bic_SR_register_on_exit(LPM4_bits);
 }
 
-#pragma vector=USCI_A0_VECTOR
+// Button IRQ
+#pragma vector=PORT1_VECTOR
+__interrupt void Port_1(void)
+{
+    P1IFG &= ~BIT3;                           // P1.3 IFG cleared
+    if (bounce_locked == 0)
+        button_pressed = 1;
+    __bic_SR_register_on_exit(LPM4_bits);
+}
+
+#pragma vector=USCIAB0RX_VECTOR
 __interrupt void USCIA0RX_ISR(void)
 {
 	//onlt rx interupt is enabled so we know this is an rx int

@@ -7,11 +7,7 @@
 
 #ifndef NRF_H_
 #define NRF_H_
-
-void NRF_set_csn(uint8_t bit);
-void NRF_set_ce(uint8_t bit);
-__interrupt void USCIA0RX_ISR(void);
-
+#include <stdint.h>
 uint8_t NRF_cmd(uint8_t cmd);
 uint8_t NRF_write(uint8_t reg, uint8_t data);
 uint8_t NRF_read(uint8_t reg);
