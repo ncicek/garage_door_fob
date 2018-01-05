@@ -84,7 +84,8 @@ uint8_t NRF_check_chip(){
 
 
 uint8_t NRF_read_status(){
-    return(NRF_read(NRF_STATUS));
+    return(NRF_cmd(0xff)); //write nop and read back status
+    //return(NRF_read(NRF_STATUS));
 
     //below doesnt work. dont know why
     //supposed to be twice as fast as a regular reg read

@@ -19,8 +19,8 @@
 #include "radio_functions.h"
 
 #define TOGGLE_DOOR 1
-#define TX_MODE
-//#define RX_MODE
+//#define TX_MODE
+#define RX_MODE
 
 //prototypes
 void act_on_command(uint8_t command);
@@ -29,7 +29,7 @@ void led (uint8_t i);
 
 //global vars
 uint8_t return_byte;
-uint8_t bounce_locked = 0;
+volatile uint8_t bounce_locked = 0;
 uint8_t button_pressed = 0;
 
 int main(void)
@@ -82,7 +82,15 @@ int main(void)
 
 	NRF_set_csn(1);
 	NRF_set_ce(0);
-	while (NRF_check_chip() != 1);	//dont do anything before verifying comms
+
+	uint8_t i = 0;
+    while (NRF_check_chip() != 1){  //dont do anything before verifying comms
+        i++;
+        if (i > 5)
+            __bis_SR_register(LPM4_bits + GIE);  //give up to avoid wasting battery
+
+    }
+
 	NRF_write(NRF_STATUS, 0xE);
 	NRF_cmd(FLUSH_TX);
 	NRF_cmd(FLUSH_RX);

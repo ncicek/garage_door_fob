@@ -49,9 +49,6 @@ uint8_t decode_code(uint8_t *command, uint8_t *generated_code){
 	aes_enc_dec(generated_code,key,1);	//first decrypt
 
 	uint16_t current_lfsr = (generated_code[0]<<8) + generated_code[1];
-	
-	//printf("previous lfsr %X\n",previous_lfsr);
-	//printf("current lfsr %X\n",current_lfsr);
 
 	if (next_lfsr(previous_lfsr) == current_lfsr){	//if our next lfsr code matches the recieved lfsr code
 		if (generated_code[15] == 0){	//if 16th byte is a zero

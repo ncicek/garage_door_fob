@@ -80,7 +80,13 @@ int main(void)
 	
 	NRF_set_csn(1);
 	NRF_set_ce(0);
-	while (NRF_check_chip() != 1);	//dont do anything before verifying comms
+	uint8_t i = 0;
+	while (NRF_check_chip() != 1){  //dont do anything before verifying comms
+	    i++;
+	    if (i > 5)
+	        __bis_SR_register(LPM4_bits + GIE);  //give up to avoid wasting battery
+
+	}
 	NRF_write(NRF_STATUS, 0xE);
 	NRF_cmd(FLUSH_TX);
 	NRF_cmd(FLUSH_RX);
