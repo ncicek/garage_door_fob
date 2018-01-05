@@ -2,31 +2,19 @@
 #include <stdint.h>
 #include "nRF24L01.h"
 #include "NRF.h"
-uint8_t return_byte;
+#include "main.h"
 
 
-void NRF_set_csn(uint8_t bit){
-    if (bit == 1)
-        P1OUT |= BIT6;
-    else
-        P1OUT &= ~BIT6;
-}
 
-void NRF_set_ce(uint8_t bit){
-    if (bit == 1)
-        P1OUT |= BIT7;
-    else
-        P1OUT &= ~BIT7;
-}
 
 //write a byte return a byte (at the same time)
 //sleep while waiting for the process
 uint8_t NRF_RW(uint8_t write_byte)
 {
     UCA0TXBUF = write_byte;
-    __bis_SR_register(LPM1_bits + GIE);   //sleep, wait for rx int
+    __bis_SR_register(LPM0_bits + GIE);   //sleep, wait for rx int
     //__delay_cycles(100); //timing adjust, need to delay csn, WARNING if you mess with clocks, gotta change this!!!
-    return (return_byte);  //return the read byte
+    return (get_rx_buffer());  //return the read byte
 }
 
 //send a raw command
@@ -133,9 +121,3 @@ void NRF_clear_status(){
 }
 
 
-#pragma vector=USCIAB0RX_VECTOR
-__interrupt void USCIA0RX_ISR(void)
-{
-    return_byte = UCA0RXBUF; //HAVE to read the buffer to automatically clear the UCAxRXIFG flag
-    __bic_SR_register_on_exit(LPM1_bits);
-}
