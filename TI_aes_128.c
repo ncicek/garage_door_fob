@@ -104,7 +104,7 @@ unsigned char galois_mul2(unsigned char value)
 // but much smaller than the 2 functions separated
 // This function only implements AES-128 encryption and decryption (AES-192 and 
 // AES-256 are not supported by this code) 
-void aes_enc_dec(unsigned char *state, unsigned char *key_given, unsigned char dir)
+void aes_enc_dec(unsigned char *state, const unsigned char *key_given, unsigned char dir)
 {
   unsigned char buf1, buf2, buf3, buf4, round, i;
 
