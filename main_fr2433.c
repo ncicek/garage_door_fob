@@ -30,7 +30,7 @@ void led (uint8_t i);
 //global vars
 uint8_t return_byte;
 volatile uint8_t bounce_locked = 0;
-uint8_t button_pressed = 0;
+volatile uint8_t button_pressed = 0;
 
 int main(void)
 {
@@ -107,7 +107,7 @@ int main(void)
 
 	while (1){
 	    __bis_SR_register(LPM4_bits + GIE);   //sleep, wait for button int
-	    if (button_pressed){
+	    if (button_pressed & (P2IN & BIT7)){
             bounce_locked = 1;
             transmit();
             bounce_locked = 0;
@@ -149,6 +149,29 @@ void act_on_command(uint8_t command){
 
 uint8_t get_rx_buffer(){
     return (return_byte);
+}
+
+//erase 64 bytes and write up to 64 bytes into fram
+void write_to_flash(uint16_t *dbl_byte_array, uint8_t len)
+{
+    #define start_addr 0x1800
+    if (len <= 64)  //dont do anything if asked to overwrite too much
+    {
+        SYSCFG0 &= ~DFWP; //disable data_ram write protection
+
+        uint8_t i;
+        uint16_t *Fram_ptr = (uint16_t *) start_addr; // Initialize Flash segment D pointer
+
+        *Fram_ptr = 0;                    // Dummy write to erase Flash segment
+
+
+        for (i = 0; i < len; i++)
+        {
+            *Fram_ptr++ = dbl_byte_array[i]; // copy value segment C to segment D
+        }
+        SYSCFG0 |= DFWP;    //reenable data_ram write protection
+
+    }
 }
 
 // Button and NRF IRQs
