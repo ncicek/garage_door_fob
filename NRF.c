@@ -103,7 +103,6 @@ void NRF_carrier_test_mode(){
     NRF_set_ce(0);
     NRF_write(NRF_CONFIG, (PWR_UP));
     NRF_write(RF_SETUP, (CONT_WAVE + PLL_LOCK + RF_PWR_LOW + RF_PWR_HIGH));
-    NRF_write(RF_CH, 40);
     NRF_set_ce(1);
     uint8_t status = NRF_read(NRF_STATUS);
 }

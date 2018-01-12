@@ -15,17 +15,11 @@
 #include <stdint.h>
 #include "nRF24L01.h"
 #include "NRF.h"
-
 #include "radio_functions.h"
+#include "main.h"
 
-#define TOGGLE_DOOR 1
-//#define TX_MODE
-#define RX_MODE
-
-//prototypes
-void act_on_command(uint8_t command);
-void led (uint8_t i);
-
+#define TX_MODE
+//#define RX_MODE
 
 //global vars
 uint8_t return_byte;
@@ -107,7 +101,7 @@ int main(void)
 
 	while (1){
 	    __bis_SR_register(LPM4_bits + GIE);   //sleep, wait for button int
-	    if (button_pressed & (P2IN & BIT7)){
+	    if (button_pressed){
             bounce_locked = 1;
             transmit();
             bounce_locked = 0;

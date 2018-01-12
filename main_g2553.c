@@ -2,11 +2,11 @@
 //1.1 miso
 //1.4 sclk
 
-//1.0 led
+//2.3 led
 //1.6 csn (spi chip select)
 //1.7 ce (Chip Enable Activates RX or TX mode)
 //2.0 irq coming out of nrf (active low)
-//2.1 toggle_door fet (only for receiver) active high
+//2.4 toggle_door fet (only for receiver) active high
 //1.3 button
 
 #include <msp430.h>
@@ -14,19 +14,15 @@
 #include "nRF24L01.h"
 #include "NRF.h"
 #include "radio_functions.h"
+#include "main.h"
+#include "crypto.h"
 
-#define TOGGLE_DOOR 1
 #define TX_MODE
 //#define RX_MODE
 
-//prototypes
-void act_on_command(uint8_t command);
-void led(uint8_t i);
-void init_flash_controller();
-
 //global vars
-uint8_t return_byte;
 volatile uint8_t button_pressed = 0;
+uint8_t return_byte;
 
 int main(void)
 {
@@ -39,13 +35,30 @@ int main(void)
     P2OUT = 0;
     P3OUT = 0;
 
-    BCSCTL1 = CALBC1_8MHZ;                    // Set DCO to 8MHz
-    DCOCTL = CALDCO_8MHZ;
-    BCSCTL3 |= LFXT1S_2;                      // MUST ENABLE VLO if you wanna use it!
+#if defined(TX_MODE)
+    __delay_cycles(10000); // wait for power to stabilize
+#elif defined(RX_MODE)
+    __delay_cycles(200000); // wait for power to stabilize
+#endif
 
-    //gpio for led csn and ce pins
-    P1OUT = 0x00;							  // P1 setup for LED & reset output
-    P1DIR |= BIT0 + BIT6 + BIT7;
+#if defined(TX_MODE)
+    DCOCTL = CALDCO_1MHZ;
+    BCSCTL1 = CALBC1_1MHZ;                    // Set DCO to 1MHz
+#elif defined(RX_MODE)
+    DCOCTL = CALDCO_8MHZ;
+    BCSCTL1 = CALBC1_8MHZ;                    // Set DCO to 8MHz
+#endif
+
+    BCSCTL3 |= LFXT1S_2;                 // MUST ENABLE VLO if you wanna use it!
+
+    //gpio for csn and ce pins
+    P1DIR |= BIT0 + BIT6 + BIT7; //csn ce
+
+#if defined(TX_MODE)
+    P1DIR |= BIT0; //led
+#elif defined(RX_MODE)
+    P2DIR |= BIT3 + BIT4; //led relay
+#endif
 
     //setup pin 2.0 as irq nrf
     P2DIR &= ~BIT0;
@@ -71,7 +84,7 @@ int main(void)
     UCA0CTL1 |= UCSWRST; //set reset before configuring
     UCA0CTL0 |= UCMSB + UCMST + UCSYNC + UCCKPH;	 // 3-pin, 8-bit SPI master
     UCA0CTL1 |= UCSSEL_2;					  // smclk
-    UCA0BR0 |= 0x00;						  // /2
+    UCA0BR0 |= 0x02;						  // /2
     UCA0BR1 = 0;							  //
     UCA0MCTL = 0;							  // No modulation
     UCA0CTL1 &= ~UCSWRST;					// **Initialize USCI state machine**
@@ -81,10 +94,10 @@ int main(void)
     init_flash_controller();
 #endif
 
-
     NRF_set_csn(1);
     NRF_set_ce(0);
     uint8_t i = 0;
+    led(1);
     while (NRF_check_chip() != 1)
     {  //dont do anything before verifying comms
         i++;
@@ -92,6 +105,7 @@ int main(void)
             __bis_SR_register(LPM4_bits + GIE); //give up to avoid wasting battery
 
     }
+    led(0);
     NRF_write(NRF_STATUS, 0xE);
     NRF_cmd(FLUSH_TX);
     NRF_cmd(FLUSH_RX);
@@ -99,10 +113,10 @@ int main(void)
     //set button interrupt so we will wake up after sleeping
 #if defined(TX_MODE)
     TX_Mode(); //configure
-               // P1.3 interrupt enabled
-    //after config, wait for button interupt
+    generate_seed();
 #elif defined(RX_MODE)
     RX_Mode();  //configure
+    load_lfsrs_into_ram();//load up the previous lfsr database into ram from flash mem
     listen();
 #endif
 
@@ -111,13 +125,15 @@ int main(void)
     volatile uint8_t state = wait_for_button;
     while (1)
     {
-        if (state == wait_for_button){
+        if (state == wait_for_button)
+        {
             P1IE |= BIT3; //enable button int
             __bis_SR_register(LPM4_bits + GIE);   //sleep, wait for button int
             P1IE &= ~BIT3;    //disable own interrupt
             state = wait_for_debounce_timer;
         }
-        else if (state == wait_for_debounce_timer){
+        else if (state == wait_for_debounce_timer)
+        {
             //start timer
             TA0CCTL0 = CCIE;                        // TA0 CCTL0
             TA0CCR0 = 55;                        // TA0 CCR0 value
@@ -150,9 +166,21 @@ void NRF_set_ce(uint8_t bit)
 void led(uint8_t i)
 {
     if (i == 1)
+    {
+#if defined(TX_MODE)
         P1OUT |= BIT0;
+#elif defined(RX_MODE)
+        P2OUT |= BIT3;
+#endif
+    }
     else
+    {
+#if defined(TX_MODE)
         P1OUT &= ~BIT0;
+#elif defined(RX_MODE)
+        P2OUT &= ~BIT3;
+#endif
+    }
 }
 
 //here we map what commands do what on the reciever side
@@ -160,9 +188,11 @@ void act_on_command(uint8_t command)
 {
     if (command == TOGGLE_DOOR)
     {
-        P2OUT |= BIT1;
-        __delay_cycles(10000);
-        P2OUT &= ~BIT1;
+        led(1);
+        P2OUT |= BIT4;
+        __delay_cycles(300000);
+        P2OUT &= ~BIT4;
+        led(0);
     }
 }
 
@@ -171,10 +201,10 @@ uint8_t get_rx_buffer()
     return (return_byte);
 }
 
+#define start_addr 0x1080 //segment B
 //erase 64 bytes and write up to 64 bytes into flash mem
 void write_to_flash(uint16_t *dbl_byte_array, uint8_t len)
 {
-    #define start_addr 0x1080 //segment B
     if (len <= 64)
     {  //dont do anything if asked to overwrite too much
         __disable_interrupt(); //ti says disable interupts before writing to flash
@@ -199,9 +229,24 @@ void write_to_flash(uint16_t *dbl_byte_array, uint8_t len)
     }
 }
 
+void read_from_flash(uint16_t *dbl_byte_array, uint8_t len)
+{
+    if (len <= 64)
+    {
+        uint8_t i;
+        uint16_t *Flash_ptr = (uint16_t *) start_addr; // Initialize Flash segment D pointer
+
+        for (i = 0; i < len; i++)
+        {
+            dbl_byte_array[i] = *Flash_ptr++; // copy value segment C to segment D
+        }
+
+    }
+}
+
 void init_flash_controller()
 {
-    FCTL2 = FWKEY + FSSEL0 + 0x17;           // MCLK/24 for Flash Timing Generator
+    FCTL2 = FWKEY + FSSEL0 + 0x17;         // MCLK/24 for Flash Timing Generator
 }
 
 // NRF IRQs
@@ -217,6 +262,7 @@ __interrupt void Port_2(void)
 __interrupt void Port_1(void)
 {
     P1IFG &= ~BIT3;                           // clear the int flag
+    button_pressed = 1;
     __bic_SR_register_on_exit(LPM4_bits);
 }
 

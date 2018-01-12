@@ -1,13 +1,14 @@
 //contains the lfsr and encrypt/decrypt routines
 
+#include <msp430.h>
 #include "TI_aes_128.h"
 #include "main.h"
 #include <stdint.h>
 #include "crypto.h"
 #define polynomial 0xd008   //maximal lenght
-#define initial_value 1
 
 uint16_t previous_lfsrs[32];
+uint16_t lfsr; //current lfsr
 
 //key is shared among reciever and all fobs
 const unsigned char key[16]   = {0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x5d, 0x0e, 0x0f};
@@ -16,9 +17,8 @@ const unsigned char key[16]   = {0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
 //generated_code must be uint8_t array with 16 elements
 void generate_code(uint8_t command, uint8_t *generated_code){
     #define bits_to_zero_pad (16-4) //modify as you more bytes of the generated_code
-	static uint16_t lfsr = initial_value;
 
-	lfsr = next_lfsr(lfsr);
+    lfsr = next_lfsr(lfsr);
 
 	//construct the packet
 	generated_code[0] = (uint8_t)(lfsr >> 8); //store msb
@@ -49,21 +49,16 @@ uint8_t decode_code(uint8_t *command, uint8_t *generated_code){
 	    return (0);
 
 	uint16_t previous_lfsr = get_previous_lfsr(device_id); //call function to get the previous lfsr of this particular device
-
-
-
 	uint16_t current_lfsr = (generated_code[0]<<8) + generated_code[1];
+    save_current_lfsr(current_lfsr, device_id); //store for the next time
 
 	if (next_lfsr(previous_lfsr) == current_lfsr){	//if our next lfsr code matches the recieved lfsr code
 		if (generated_code[15] == 0){	//if 16th byte is a zero
-			previous_lfsr = current_lfsr;	//store for the next time
 			*command = generated_code[2];	//then we are good
 			return(1);
 		}			
 	}
 	
-	save_current_lfsr(current_lfsr, device_id); //store for the next time
-	//previous_lfsr = current_lfsr;	//store for the next time
 
 	command = 0;
 	return(0);	
@@ -84,6 +79,24 @@ uint8_t get_chips_id(){
 
 }
 
+void generate_seed(){
+    uint8_t i;
+    ADC10CTL0 = ADC10ON + ADC10IE; // ADC10ON, interrupt enabled
+    ADC10CTL1 = INCH_1;                       // input A1
+    ADC10AE0 |= 0x02;                         // PA.1 ADC option select
+
+    for (i=0; i < 15; i++){
+        ADC10CTL0 |= ENC + ADC10SC;             // Sampling and conversion start
+        __bis_SR_register(CPUOFF + GIE);
+        lfsr += ADC10MEM; //accumulate adc readings
+    }
+
+    //turn off ADC
+    ADC10CTL0 = 0;
+    ADC10CTL1 = 0;
+    ADC10AE0 = 0;
+}
+
 
 // pass it a device id and it will return that devices' previous_lfsr
 //if device is unknown or something else, it will return garbage
@@ -95,6 +108,15 @@ uint16_t get_previous_lfsr(uint8_t device_id){
 void save_current_lfsr(uint16_t current_lfsr, uint8_t device_id){
     previous_lfsrs[device_id] = current_lfsr;
     write_to_flash(previous_lfsrs, 2*32);
+}
 
+void load_lfsrs_into_ram(){
+    read_from_flash(previous_lfsrs, 2*32);
+}
 
+// ADC10 interrupt service routine
+#pragma vector=ADC10_VECTOR
+__interrupt void ADC10_ISR(void)
+{
+  __bic_SR_register_on_exit(CPUOFF);        // Clear CPUOFF bit from 0(SR)
 }
