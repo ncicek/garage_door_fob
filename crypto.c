@@ -15,8 +15,8 @@ const unsigned char key[16]   = {0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
 
 //provide command to encrypt and get back a code
 //generated_code must be uint8_t array with 16 elements
-void generate_code(uint8_t command, uint8_t *generated_code){
-    #define bits_to_zero_pad (16-4) //modify as you more bytes of the generated_code
+void generate_code(uint8_t command, uint8_t *generated_code, uint16_t time){
+    #define bits_to_zero_pad (16-6) //modify as you more bytes of the generated_code
 
     lfsr = next_lfsr(lfsr);
 
@@ -25,6 +25,8 @@ void generate_code(uint8_t command, uint8_t *generated_code){
 	generated_code[1] = (uint8_t)(lfsr & 0xFF); //store lsb
 	generated_code[2] = command;
 	generated_code[3] = get_chips_id();
+	generated_code[4] = (uint8_t)(time >> 8);
+    generated_code[5] = (uint8_t)(time & 0xFF);
 	
 	uint8_t loop;
 	for (loop = (16-bits_to_zero_pad); loop < 16; loop++)	//zero pad
@@ -35,12 +37,14 @@ void generate_code(uint8_t command, uint8_t *generated_code){
 
 //give a code and get back a command if its good
 //return 1 if authenticated and valid code was found
-uint8_t decode_code(uint8_t *command, uint8_t *generated_code){
+uint8_t decode_code(uint8_t *command, uint8_t *generated_code, uint16_t *time){
 
 	//static uint16_t previous_lfsr = initial_value;
 	aes_enc_dec(generated_code,key,1);	//decrypt the packet
 
 	uint8_t device_id = generated_code[3]; //pull out device id
+
+	*time = (uint16_t)((generated_code[4] << 8) + generated_code[5]);
 
 	//sanity check first
 	if (generated_code[15] != 0)

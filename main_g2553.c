@@ -17,11 +17,11 @@
 #include "main.h"
 #include "crypto.h"
 
-#define TX_MODE
-//#define RX_MODE
 
-//global vars
+//global vars / flag
 volatile uint8_t button_pressed = 0;
+volatile uint8_t debounce_timer = 0;
+volatile uint8_t timer_armed = 0;
 uint8_t return_byte;
 
 int main(void)
@@ -35,21 +35,22 @@ int main(void)
     P2OUT = 0;
     P3OUT = 0;
 
-#if defined(TX_MODE)
-    __delay_cycles(10000); // wait for power to stabilize
-#elif defined(RX_MODE)
-    __delay_cycles(200000); // wait for power to stabilize
-#endif
 
-#if defined(TX_MODE)
+#if defined(TX_MODE)    //transmitter runs at 1mhz
     DCOCTL = CALDCO_1MHZ;
     BCSCTL1 = CALBC1_1MHZ;                    // Set DCO to 1MHz
-#elif defined(RX_MODE)
-    DCOCTL = CALDCO_8MHZ;
-    BCSCTL1 = CALBC1_8MHZ;                    // Set DCO to 8MHz
+#elif defined(RX_MODE)      //reciver runs at 8mhz
+            DCOCTL = CALDCO_8MHZ;
+            BCSCTL1 = CALBC1_8MHZ;                    // Set DCO to 8MHz
 #endif
 
     BCSCTL3 |= LFXT1S_2;                 // MUST ENABLE VLO if you wanna use it!
+
+#if defined(TX_MODE)
+    __delay_cycles(100); // wait for power to stabilize
+#elif defined(RX_MODE)
+    __delay_cycles(200000); // wait for power to stabilize
+#endif
 
     //gpio for csn and ce pins
     P1DIR |= BIT0 + BIT6 + BIT7; //csn ce
@@ -57,7 +58,7 @@ int main(void)
 #if defined(TX_MODE)
     P1DIR |= BIT0; //led
 #elif defined(RX_MODE)
-    P2DIR |= BIT3 + BIT4; //led relay
+            P2DIR |= BIT3 + BIT4; //led relay
 #endif
 
     //setup pin 2.0 as irq nrf
@@ -97,7 +98,6 @@ int main(void)
     NRF_set_csn(1);
     NRF_set_ce(0);
     uint8_t i = 0;
-    led(1);
     while (NRF_check_chip() != 1)
     {  //dont do anything before verifying comms
         i++;
@@ -105,7 +105,7 @@ int main(void)
             __bis_SR_register(LPM4_bits + GIE); //give up to avoid wasting battery
 
     }
-    led(0);
+    //blink_led();
     NRF_write(NRF_STATUS, 0xE);
     NRF_cmd(FLUSH_TX);
     NRF_cmd(FLUSH_RX);
@@ -127,8 +127,14 @@ int main(void)
     {
         if (state == wait_for_button)
         {
+            while (timer_armed){
+                __bis_SR_register(LPM0_bits + GIE); // sleep with smclk on for timer to expire
+            }
             P1IE |= BIT3; //enable button int
-            __bis_SR_register(LPM4_bits + GIE);   //sleep, wait for button int
+            while (button_pressed == 0){
+                __bis_SR_register(LPM4_bits + GIE);   //sleep, wait for button int
+            }
+            button_pressed = 0;
             P1IE &= ~BIT3;    //disable own interrupt
             state = wait_for_debounce_timer;
         }
@@ -138,7 +144,10 @@ int main(void)
             TA0CCTL0 = CCIE;                        // TA0 CCTL0
             TA0CCR0 = 55;                        // TA0 CCR0 value
             TA0CTL = TASSEL_1 + ID_3 + MC1 + TACLR + TAIE;
-            __bis_SR_register(LPM3_bits + GIE);
+            while (debounce_timer == 0){
+                __bis_SR_register(LPM3_bits + GIE);
+            }
+            debounce_timer = 0;
             TA0CTL = 0;                           // stop the timer
             if (~((P1IN & BIT3) > 0))    //if the button is still pressed
                 transmit();
@@ -147,7 +156,7 @@ int main(void)
     }
 }
 
-void NRF_set_csn(uint8_t bit)
+inline void NRF_set_csn(uint8_t bit)
 {
     if (bit == 1)
         P1OUT |= BIT6;
@@ -155,7 +164,7 @@ void NRF_set_csn(uint8_t bit)
         P1OUT &= ~BIT6;
 }
 
-void NRF_set_ce(uint8_t bit)
+inline void NRF_set_ce(uint8_t bit)
 {
     if (bit == 1)
         P1OUT |= BIT7;
@@ -163,7 +172,7 @@ void NRF_set_ce(uint8_t bit)
         P1OUT &= ~BIT7;
 }
 
-void led(uint8_t i)
+inline void led(uint8_t i)
 {
     if (i == 1)
     {
@@ -183,16 +192,38 @@ void led(uint8_t i)
     }
 }
 
+inline void relay(uint8_t i)
+{
+    if (i == 1)
+    {
+        P2OUT |= BIT4;
+    }
+    else
+    {
+        P2OUT &= ~BIT4; //relay off
+    }
+}
+
 //here we map what commands do what on the reciever side
-void act_on_command(uint8_t command)
+void act_on_command(uint8_t command, uint16_t time)
 {
     if (command == TOGGLE_DOOR)
     {
         led(1);
-        P2OUT |= BIT4;
-        __delay_cycles(300000);
-        P2OUT &= ~BIT4;
-        led(0);
+        relay(1);
+        arm_timer1(time);
+        //timer isr will shut off the led and relay
+    }
+}
+
+void arm_timer1(uint16_t vlo_ticks)
+{
+    if (timer_armed == 0)
+    {
+        timer_armed = 1;
+        TA1CCTL0 = CCIE;                        // TA1 CCTL0
+        TA1CCR0 = vlo_ticks;                        // TA1 CCR0 value
+        TA1CTL = TASSEL_2 + ID_2 + MC1 + TACLR + TAIE;
     }
 }
 
@@ -254,7 +285,7 @@ void init_flash_controller()
 __interrupt void Port_2(void)
 {
     P2IFG &= ~BIT0;                           // P2.0 IFG cleared
-    __bic_SR_register_on_exit(LPM4_bits);
+    __bic_SR_register_on_exit(LPM3_bits | LPM1_bits);
 }
 
 // Button IRQ
@@ -262,13 +293,28 @@ __interrupt void Port_2(void)
 __interrupt void Port_1(void)
 {
     P1IFG &= ~BIT3;                           // clear the int flag
-    button_pressed = 1;
+    button_pressed = 1;  //flag
     __bic_SR_register_on_exit(LPM4_bits);
+}
+
+//action timer (led/relay)
+#pragma vector=TIMER1_A0_VECTOR //CCR0 vector
+__interrupt void timer1_a0(void)
+{
+    TA1CTL = 0;                           // stop the timer
+
+#if defined(RX_MODE)
+    relay(0);
+#endif
+
+    led(0);
+    timer_armed = 0; //reset
+    __bic_SR_register_on_exit(LPM1_bits);
 }
 
 #pragma vector=TIMER0_A0_VECTOR //CCR0 vector
 __interrupt void timer0_a0(void)
-{
+{   debounce_timer = 1; //flag
     __bic_SR_register_on_exit(LPM3_bits);
 }
 
