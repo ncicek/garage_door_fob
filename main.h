@@ -4,8 +4,8 @@
 #include <stdint.h>
 #define TOGGLE_DOOR 1
 
-//#define TX_MODE
-#define RX_MODE
+#define TX_MODE
+//#define RX_MODE
 
 void led (uint8_t i);
 void blink_led();

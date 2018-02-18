@@ -9,7 +9,7 @@
 
 #define PLOAD_WIDTH 16  //16 bytes to transmit
 #define TX_ADR_WIDTH    5   // 5 unsigned chars TX(RX) address width
-#define SWITCH_TIME 65000
+#define SWITCH_TIME 800
 uint8_t TX_ADDRESS[TX_ADR_WIDTH] = {0x12,0x40,0xFE,0x17,0xC5};
 
 //declare extern flags

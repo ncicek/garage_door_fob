@@ -110,11 +110,11 @@ uint16_t get_previous_lfsr(uint8_t device_id){
 //write lfsr to ram and save ram to flash
 void save_current_lfsr(uint16_t current_lfsr, uint8_t device_id){
     previous_lfsrs[device_id] = current_lfsr;
-    write_to_flash(previous_lfsrs, 2*32);
+    write_to_flash(previous_lfsrs, 32);
 }
 
 void load_lfsrs_into_ram(){
-    read_from_flash(previous_lfsrs, 2*32);
+    read_from_flash(previous_lfsrs, 32);
 }
 
 // ADC10 interrupt service routine
