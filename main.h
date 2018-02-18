@@ -8,6 +8,7 @@
 #define RX_MODE
 
 void led (uint8_t i);
+void blink_led();
 void act_on_command(uint8_t command, uint16_t time);
 uint8_t get_rx_buffer();
 inline void NRF_set_csn(uint8_t bit);

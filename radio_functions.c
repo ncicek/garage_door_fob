@@ -12,9 +12,10 @@
 #define SWITCH_TIME 65000
 uint8_t TX_ADDRESS[TX_ADR_WIDTH] = {0x12,0x40,0xFE,0x17,0xC5};
 
-
-
+//declare extern flags
+extern volatile uint8_t timer_armed;
 extern volatile uint8_t button_pressed;
+
 void transmit(){
     static uint8_t previous_transmission_failed = 1; //track previous transmission status
     uint8_t n, i;
@@ -22,7 +23,6 @@ void transmit(){
         n = 2;  //double send if we have lost sync due to missed trasmission
     else
         n = 1;
-
     for (i=0; i<n; i++){    //repeat transmission n times
         uint8_t code[PLOAD_WIDTH];
         generate_code(TOGGLE_DOOR, code, SWITCH_TIME);
@@ -47,7 +47,6 @@ void transmit(){
         else{
             previous_transmission_failed = 1;
         }
-        //__delay_cycles(100000);
     }
 }
 
@@ -60,27 +59,29 @@ void listen(){
 
     //now sleep and wait for irq indicating recived packet
     while(1){
-        NRF_cmd(FLUSH_RX);
-        NRF_clear_status(); //clears all flags after each wakeup such as irq bit
-        P1IE |= BIT3; //enable button int
-        _bis_SR_register(LPM1_bits + GIE); //sleep wake up on irq //lpm 3 because we need timer to work on the vlo
-        uint8_t status = NRF_read_status();
-        if (status & RX_DR) {
+      while (timer_armed == 1){
+          __bis_SR_register(LPM3_bits + GIE); // sleep with smclk on for timer to expire
+      }
+      NRF_cmd(FLUSH_RX);
+      NRF_clear_status(); //clears all flags after each wakeup such as irq bit
+      P1IE |= BIT3; //enable button int
+      _bis_SR_register(LPM4_bits + GIE); //sleep wake up on irq
+      uint8_t status = NRF_read_status();
+      if (status & RX_DR) {
 
-            NRF_read_buf(R_RX_PAYLOAD, recieved_code, PLOAD_WIDTH);    //load the recieved payload into code
-            blink_led();
+          NRF_read_buf(R_RX_PAYLOAD, recieved_code, PLOAD_WIDTH);    //load the recieved payload into code
+          blink_led();
 
-            if (decode_code(&recieved_command, recieved_code, &time) == 1){ //call decode_code on the recieved code to see if it is valid
-                act_on_command(recieved_command, time);
-            }
-        }
-        if (button_pressed == 1){ //the button in RX mode just checks SPI comms as a sanity check
-            button_pressed = 0;
-            if (NRF_check_chip()){
-                blink_led();
-            }
-        }
-
+          if (decode_code(&recieved_command, recieved_code, &time) == 1){ //call decode_code on the recieved code to see if it is valid
+              act_on_command(recieved_command, time);
+          }
+      }
+      if (button_pressed == 1){ //the button in RX mode just checks SPI comms as a sanity check
+          button_pressed = 0;
+          if (NRF_check_chip()){
+              blink_led();
+          }
+      }
     }
 }
 
@@ -108,18 +109,5 @@ void Common_NRF_Config(void){
     NRF_write(SETUP_RETR, (ARD*15+ARC*15)); // 500us + 86us, 10 retransmit
     NRF_write(RF_CH, 0); //rf = 2400+0 =2.4GHZ avoid 80211wifi spectrum
     NRF_write(RF_SETUP, (RF_PWR_LOW + RF_PWR_HIGH + RF_DR_LOW));   // TX_PWR:0dBm, Datarate:250kbps (0x26)
-
-}
-
-void blink_led(){ //sets led high and sets timer to turn itoff after a while
-    led(1);
-    //led(0);
-#if defined(TX_MODE)
-    arm_timer1(250);
-#elif defined(RX_MODE)
-    arm_timer1(50);
-#endif
-
-    //_bis_SR_register(LPM3_bits + GIE);
 
 }

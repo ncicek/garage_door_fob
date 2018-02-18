@@ -22,7 +22,7 @@
 volatile uint8_t button_pressed = 0;
 volatile uint8_t debounce_timer = 0;
 volatile uint8_t timer_armed = 0;
-uint8_t return_byte;
+volatile uint8_t return_byte;
 
 int main(void)
 {
@@ -122,14 +122,14 @@ int main(void)
 
 #define wait_for_button 0
 #define wait_for_debounce_timer 1
-    volatile uint8_t state = wait_for_button;
+    uint8_t state = wait_for_button;
     while (1)
     {
+      while (timer_armed == 1){
+          __bis_SR_register(LPM3_bits + GIE); // sleep with smclk on for timer to expire
+      }
         if (state == wait_for_button)
         {
-            while (timer_armed){
-                __bis_SR_register(LPM0_bits + GIE); // sleep with smclk on for timer to expire
-            }
             P1IE |= BIT3; //enable button int
             while (button_pressed == 0){
                 __bis_SR_register(LPM4_bits + GIE);   //sleep, wait for button int
@@ -223,13 +223,25 @@ void arm_timer1(uint16_t vlo_ticks)
         timer_armed = 1;
         TA1CCTL0 = CCIE;                        // TA1 CCTL0
         TA1CCR0 = vlo_ticks;                        // TA1 CCR0 value
-        TA1CTL = TASSEL_2 + ID_2 + MC1 + TACLR + TAIE;
+        TA1CTL = TASSEL_1 + MC1 + TACLR + TAIE; //tassel_1 == aclk, tassel_2 ==smclk
     }
 }
 
 uint8_t get_rx_buffer()
 {
     return (return_byte);
+}
+
+void blink_led(){ //sets led high and sets timer to turn itoff after a while
+    led(1);
+    //led(0);
+#if defined(TX_MODE)
+    arm_timer1(250);
+#elif defined(RX_MODE)
+    arm_timer1(50);
+#endif
+
+    //_bis_SR_register(LPM3_bits + GIE);
 }
 
 #define start_addr 0x1080 //segment B
@@ -285,7 +297,7 @@ void init_flash_controller()
 __interrupt void Port_2(void)
 {
     P2IFG &= ~BIT0;                           // P2.0 IFG cleared
-    __bic_SR_register_on_exit(LPM3_bits | LPM1_bits);
+    __bic_SR_register_on_exit(LPM4_bits);
 }
 
 // Button IRQ
@@ -301,7 +313,7 @@ __interrupt void Port_1(void)
 #pragma vector=TIMER1_A0_VECTOR //CCR0 vector
 __interrupt void timer1_a0(void)
 {
-    TA1CTL = 0;                           // stop the timer
+    TA1CTL = 0;                           // stop the timer SUSPECT
 
 #if defined(RX_MODE)
     relay(0);
@@ -309,7 +321,7 @@ __interrupt void timer1_a0(void)
 
     led(0);
     timer_armed = 0; //reset
-    __bic_SR_register_on_exit(LPM1_bits);
+    __bic_SR_register_on_exit(LPM3_bits);
 }
 
 #pragma vector=TIMER0_A0_VECTOR //CCR0 vector

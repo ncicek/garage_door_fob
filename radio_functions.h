@@ -6,7 +6,6 @@ void TX_Mode(void);
 void RX_Mode(void);
 void listen();
 void transmit();
-void blink_led();
 void NRF_set_csn(uint8_t bit);
 void NRF_set_ce(uint8_t bit);
 
