@@ -40,14 +40,14 @@ int main(void)
     DCOCTL = CALDCO_1MHZ;
     BCSCTL1 = CALBC1_1MHZ;                    // Set DCO to 1MHz
 #elif defined(RX_MODE)      //reciver runs at 8mhz
-            DCOCTL = CALDCO_8MHZ;
-            BCSCTL1 = CALBC1_8MHZ;                    // Set DCO to 8MHz
+    DCOCTL = CALDCO_8MHZ;
+    BCSCTL1 = CALBC1_8MHZ;                    // Set DCO to 8MHz
 #endif
 
     BCSCTL3 |= LFXT1S_2;                 // MUST ENABLE VLO if you wanna use it!
 
 #if defined(TX_MODE)
-    __delay_cycles(100); // wait for power to stabilize
+    __delay_cycles(10000); // wait for power to stabilize
 #elif defined(RX_MODE)
     __delay_cycles(200000); // wait for power to stabilize
 #endif
@@ -73,9 +73,6 @@ int main(void)
     P1IES |= BIT3;                            // P1.3 Hi/lo edge
     P1REN |= BIT3;                          // Enable Pull Up on
     P1IFG &= ~BIT3;                           // P1.3 IFG cleared
-
-#if defined(RX_MODE)
-#endif
 
     //usci config
     P1SEL = BIT1 + BIT2 + BIT4;	  //set the spi pins to spi mode
@@ -105,7 +102,7 @@ int main(void)
             __bis_SR_register(LPM4_bits + GIE); //give up to avoid wasting battery
 
     }
-    //blink_led();
+    blink_led();
     NRF_write(NRF_STATUS, 0xE);
     NRF_cmd(FLUSH_TX);
     NRF_cmd(FLUSH_RX);
