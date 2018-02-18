@@ -5,13 +5,12 @@
 #include "main.h"
 #include <stdint.h>
 #include "crypto.h"
+#include "secret_key.h"
 #define polynomial 0xd008   //maximal lenght
 
 uint16_t previous_lfsrs[32];
 uint16_t lfsr; //current lfsr
 
-//key is shared among reciever and all fobs
-const unsigned char key[16]   = {0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x5d, 0x0e, 0x0f};
 
 //provide command to encrypt and get back a code
 //generated_code must be uint8_t array with 16 elements
